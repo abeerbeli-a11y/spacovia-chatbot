@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spacovia Chatbot Admin</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    background: #f4f4fa;
+    color: #1a1a2e;
+  }
+  header {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 16px 24px;
+    font-weight: 600;
+    font-size: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #logout-btn {
+    background: none;
+    border: 1px solid #fff;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  main {
+    max-width: 800px;
+    margin: 24px auto;
+    padding: 0 16px;
+  }
+  #login-view {
+    max-width: 320px;
+    margin: 80px auto;
+    background: #fff;
+    padding: 24px;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+  #login-view h2 { margin-top: 0; font-size: 18px; }
+  input[type="password"], textarea, input[type="number"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  button.primary {
+    background: #1a1a2e;
+    color: #fff;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 10px;
+  }
+  button.primary:disabled { opacity: 0.6; cursor: default; }
+  .error { color: #c0392b; font-size: 13px; margin-top: 8px; }
+  .status { color: #2a7a2a; font-size: 13px; margin-top: 8px; }
+  nav.tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+  nav.tabs button {
+    background: #fff;
+    border: 1px solid #ddd;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  nav.tabs button.active {
+    background: #1a1a2e;
+    color: #fff;
+    border-color: #1a1a2e;
+  }
+  .panel {
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    display: none;
+  }
+  .panel.active { display: block; }
+  textarea#knowledge-text { min-height: 360px; font-family: monospace; font-size: 13px; }
+  .session {
+    border: 1px solid #eee;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .session summary {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #555;
+    background: #fafafd;
+  }
+  .exchange { padding: 10px 14px; border-top: 1px solid #f0f0f0; }
+  .exchange .q { font-weight: 600; font-size: 13px; }
+  .exchange .a { font-size: 13px; color: #444; margin-top: 4px; white-space: pre-wrap; }
+  .usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .usage-card { background: #fafafd; border: 1px solid #eee; border-radius: 8px; padding: 12px 14px; }
+  .usage-card .label { font-size: 12px; color: #888; }
+  .usage-card .value { font-size: 20px; font-weight: 600; margin-top: 4px; }
+  label.cap-label { display: block; font-size: 13px; margin-top: 14px; margin-bottom: 4px; color: #555; }
+  .hint { font-size: 12px; color: #999; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div id="login-view">
+  <h2>Admin login</h2>
+  <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
+  <button class="primary" id="login-btn">Log in</button>
+  <div class="error" id="login-error"></div>
+</div>
+
+<div id="app-view" style="display:none">
+  <header>
+    <span>Spacovia Chatbot Admin</span>
+    <button id="logout-btn">Log out</button>
+  </header>
+  <main>
+    <nav class="tabs">
+      <button data-tab="knowledge" class="active">Knowledge</button>
+      <button data-tab="conversations">Conversations</button>
+      <button data-tab="usage">Usage &amp; limits</button>
+    </nav>
+
+    <section class="panel active" id="panel-knowledge">
+      <p class="hint">This is what the bot knows. Edit and save — changes apply to the next question, no restart needed.</p>
+      <textarea id="knowledge-text"></textarea>
+      <button class="primary" id="knowledge-save">Save</button>
+      <div class="status" id="knowledge-status"></div>
+    </section>
+
+    <section class="panel" id="panel-conversations">
+      <p class="hint">Most recent visitor conversations first.</p>
+      <div id="conversations-list"></div>
+    </section>
+
+    <section class="panel" id="panel-usage">
+      <div class="usage-grid">
+        <div class="usage-card">
+          <div class="label">Messages today</div>
+          <div class="value" id="usage-day-messages">—</div>
+        </div>
+        <div class="usage-card">
+          <div class="label">Tokens this month</div>
+          <div class="value" id="usage-month-tokens">—</div>
+        </div>
+      </div>
+      <label class="cap-label" for="cap-daily">Max messages per day (leave blank for no limit)</label>
+      <input type="number" id="cap-daily" min="0" />
+      <label class="cap-label" for="cap-monthly">Max tokens per month (leave blank for no limit)</label>
+      <input type="number" id="cap-monthly" min="0" />
+      <button class="primary" id="usage-save">Save limits</button>
+      <div class="status" id="usage-status"></div>
+    </section>
+  </main>
+</div>
+
+<script src="./admin.js"></script>
+</body>
+</html>
