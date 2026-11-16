@@ -1,0 +1,12 @@
+{
+  "name": "Spacovia Chatbot Admin",
+  "short_name": "Spacovia Admin",
+  "start_url": "/admin",
+  "scope": "/admin",
+  "display": "standalone",
+  "background_color": "#f4f4fa",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    { "src": "./icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
