@@ -113,6 +113,37 @@ document.getElementById("knowledge-save").addEventListener("click", async () => 
   }
 });
 
+document.getElementById("knowledge-ai-ask").addEventListener("click", async () => {
+  const instructionBox = document.getElementById("knowledge-ai-instruction");
+  const instruction = instructionBox.value.trim();
+  if (!instruction) return;
+
+  const status = document.getElementById("knowledge-ai-status");
+  const askBtn = document.getElementById("knowledge-ai-ask");
+  askBtn.disabled = true;
+  status.textContent = "Thinking...";
+  try {
+    const { summary, content } = await api("/business-info/ai-edit", {
+      method: "POST",
+      body: JSON.stringify({ instruction }),
+    });
+    document.getElementById("knowledge-text").value = content;
+    status.textContent = `${summary} — review below, then Save to apply.`;
+    instructionBox.value = "";
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+  } finally {
+    askBtn.disabled = false;
+  }
+});
+
+document.getElementById("knowledge-ai-instruction").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById("knowledge-ai-ask").click();
+  }
+});
+
 // Conversations tab (inbox)
 const LIST_POLL_MS = 10000;
 const THREAD_POLL_MS = 4000;
