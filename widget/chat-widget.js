@@ -16,6 +16,10 @@
 
   const history = [];
   let sessionId = null;
+  let lastSeq = 0;
+  let pollTimer = null;
+  let pausedHintShown = false;
+  const POLL_MS = 4000;
   try {
     sessionId = localStorage.getItem("spacovia_session_id") || null;
   } catch {
@@ -70,6 +74,39 @@
     if (open && messagesEl.children.length === 0) {
       addMessage("assistant", greeting);
     }
+    if (open) startPolling();
+    else stopPolling();
+  }
+
+  function startPolling() {
+    stopPolling();
+    if (!sessionId) return;
+    poll();
+    pollTimer = setInterval(poll, POLL_MS);
+  }
+
+  function stopPolling() {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  async function poll() {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`${apiUrl}/${encodeURIComponent(sessionId)}/messages?after=${lastSeq}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      (data.messages || []).forEach((m) => {
+        if (m.seq <= lastSeq) return;
+        lastSeq = m.seq;
+        if (m.from === "admin" || m.from === "bot") {
+          addMessage("assistant", m.text);
+          history.push({ role: "assistant", content: m.text });
+        }
+      });
+    } catch {
+      // network hiccup — next interval tick will retry
+    }
   }
 
   bubble.addEventListener("click", () => setOpen(!panel.classList.contains("open")));
@@ -96,7 +133,8 @@
       if (!res.ok) throw new Error("Request failed");
 
       const data = await res.json();
-      if (data.sessionId && data.sessionId !== sessionId) {
+      const isNewSession = data.sessionId && data.sessionId !== sessionId;
+      if (isNewSession) {
         sessionId = data.sessionId;
         try {
           localStorage.setItem("spacovia_session_id", sessionId);
@@ -104,9 +142,19 @@
           // ignore
         }
       }
+      if (typeof data.lastSeq === "number" && data.lastSeq > lastSeq) lastSeq = data.lastSeq;
+
       typingEl.remove();
-      addMessage("assistant", data.reply);
-      history.push({ role: "assistant", content: data.reply });
+      if (data.reply) {
+        addMessage("assistant", data.reply);
+        history.push({ role: "assistant", content: data.reply });
+      } else if (data.paused && !pausedHintShown) {
+        pausedHintShown = true;
+        addMessage("assistant", "Thanks — someone from our team will reply here shortly.");
+      }
+      // A human may already be handling this conversation (paused) or may
+      // reply any time after this — keep polling for their messages.
+      if (isNewSession || !pollTimer) startPolling();
     } catch (err) {
       typingEl.remove();
       addMessage("assistant", "Sorry, something went wrong. Please try again in a moment.");

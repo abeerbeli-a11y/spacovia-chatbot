@@ -7,7 +7,7 @@ import { randomUUID } from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { router as adminRouter } from "./admin-routes.js";
 import { checkCaps, recordUsage } from "./lib/usage.js";
-import { logExchange } from "./lib/conversations.js";
+import { appendMessage, isPaused, getMessagesAfter } from "./lib/conversations.js";
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -46,12 +46,23 @@ app.post("/chat", async (req, res) => {
     return res.status(400).json({ error: "messages array is required" });
   }
 
+  const lastUserMessage = String(messages[messages.length - 1]?.content ?? "").slice(0, 4000);
+  const visitorMessage = appendMessage({ sessionId, from: "visitor", text: lastUserMessage });
+
+  if (isPaused(sessionId)) {
+    // A human has taken this conversation over — don't let the bot answer.
+    // The widget will pick up the human's reply by polling.
+    return res.json({ sessionId, paused: true, lastSeq: visitorMessage.seq });
+  }
+
   const capCheck = checkCaps();
   if (!capCheck.allowed) {
-    return res.json({
+    const message = appendMessage({
       sessionId,
-      reply: "This chatbot has reached its usage limit for now. Please contact us directly and we'll help you out.",
+      from: "bot",
+      text: "This chatbot has reached its usage limit for now. Please contact us directly and we'll help you out.",
     });
+    return res.json({ sessionId, reply: message.text, lastSeq: message.seq });
   }
 
   const trimmedHistory = messages.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
@@ -77,14 +88,18 @@ app.post("/chat", async (req, res) => {
       outputTokens: response.usage?.output_tokens || 0,
     });
 
-    const lastUserMessage = trimmedHistory[trimmedHistory.length - 1]?.content || "";
-    logExchange({ sessionId, question: lastUserMessage, answer: reply });
+    const message = appendMessage({ sessionId, from: "bot", text: reply });
 
-    res.json({ sessionId, reply });
+    res.json({ sessionId, reply, lastSeq: message.seq });
   } catch (err) {
     console.error("Anthropic API error:", err);
     res.status(500).json({ error: "Something went wrong talking to the chatbot." });
   }
+});
+
+app.get("/chat/:sessionId/messages", (req, res) => {
+  const after = Number(req.query.after) || 0;
+  res.json(getMessagesAfter(req.params.sessionId, after));
 });
 
 app.use("/admin/api", adminRouter);
